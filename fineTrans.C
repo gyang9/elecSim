@@ -19,6 +19,8 @@
 #include <TRandom3.h>
 #include "TG4Event.h"
 
+#include "kalman-test.cpp"
+
 void fineTransfer(TString outputF, TString inputF, int ident){
 
 Double_t E,startX,startY,startZ,stopX,stopY,stopZ,startT,stopT;
@@ -70,6 +72,7 @@ double trueCos[30]={};
 double Enu;
 double Mode;
 Int_t if3DST[2000]={};
+Int_t ifTPC[2000]={};
 Int_t intPoint =0;
 Int_t NHits = 0;
 Int_t hitPE_m[2000][3]={};
@@ -89,6 +92,7 @@ c->Branch("hitE",&ener,"hitE[2000]/D");
 c->Branch("trueCos",&trueCos,"trueCos[30]/D");
 c->Branch("true4Mom",&true4Mom,"true4Mom[30][4]/D");
 c->Branch("if3DST",&if3DST,"if3DST[2000]/I");
+c->Branch("ifTPC",&ifTPC,"ifTPC[2000]/I");
 //c->Branch("intPoint",&intPoint,"intPoint/I");
 //c->Branch("Mode",&Mode,"Mode/D");
 //c->Branch("Enu",&Enu,"Enu/D");
@@ -115,6 +119,8 @@ Int_t rightSignb=0,wrongSignb=0;
 double nuenergy[20000]={};
 int interactionMode[20000]={};
 TRandom3* random1 = new TRandom3();
+TRandom3* random2 = new TRandom3();
+random2->SetSeed(6666);
 
 for(Int_t ii=nevent*ident;ii<nevent*(ident+1);ii++){
 
@@ -133,6 +139,7 @@ for(Int_t ii=nevent*ident;ii<nevent*(ident+1);ii++){
     PDG[ccloop1] = 0;
     ener[ccloop1] = 0;
     if3DST[ccloop1] = 0;
+    ifTPC[ccloop1] = 0;
     if (ccloop1 < 30){
       trueCos[ccloop1]=0;  
     }
@@ -155,6 +162,107 @@ for(Int_t ii=nevent*ident;ii<nevent*(ident+1);ii++){
 for(auto sd : event->SegmentDetectors)
 {
   for(Int_t i=0;i<sd.second.size();i++){
+
+  /*  T2K upgrade numbers
+  --- Cut levels --------
+  < highlandCorrections.mom_corrections.sigma_x = 0.800 >   // minimum accum level to save the event
+  < highlandCorrections.mom_corrections.B = 0.2 >   // minimum accum level to save the event
+
+
+  --- Event Weights ------------
+
+  Enable/disable configurations with a single systematic (when EnableSingleWeightSystConfigurations = 1)
+  and enable systematics in the "all_syst" configuration (when EnableAllSystematics = 1)
+
+  < highlandCorrections.mom_corrections.x0 = 115.103 > 
+  */
+
+    if( sd.first.find('TPC') != std::string::npos ){
+      /*
+      ////////////////////////////////////////////////////////////////////////////
+      // this function is used in superFGD	    
+      double pt_iv = anaUtils::ComputeInversePT(*cross)*units::MeV;
+      double sigma = Sigma(cross,partID);
+
+      Float_t u_t = sqrt(1-pow(cross->DirectionStart[0],2));
+      double pt_iv_smeared = gRandom->Gaus(pt_iv,sigma);
+      double p_smeared     = (1/pt_iv_smeared)*(1/u_t);
+  
+      cross->MomentumError=sigma;
+      return p_smeared;
+
+      ////////////////////////////////////////////////////////////////////////////////
+      // this function is used in superFGD
+      double LYZ = cross->DeltaLYZ/units::m;
+      double sin_lambda = sqrt(1-pow(cross->DirectionStart[2],2));
+      double cos_lambda = fabs(cross->DirectionStart[2]);
+  
+      int N=0;
+      //if (cross->DirectionStart[1] < cross->DirectionStart[2])
+      N = abs(cross->DeltaLYZ/(9.7*units::mm)) > 72 ? 72:abs(cross->DeltaLYZ/(9.7*units::mm));
+      //else
+      //N = abs(cross->DeltaLYZ*cross->DirectionStart[1]/(6.9*units::mm));
+
+      if (LYZ < 1e-6)
+        return 0;
+
+      //  if     (pdg==211)  mass = 139.570; // pi+-
+      //  else if(pdg==13)   mass = 105.658; // muon
+      //  else if(pdg==2212) mass = 938.272; // proton
+      //  else if(pdg==11)   mass = 0.511;   // electron
+      double mass = anaUtils::GetParticleMass(partID);
+
+      double bg      = cross->Momentum/mass;
+      double beta   = bg / sqrt(1. + bg * bg);
+      double sigma_x = ND::params().GetParameterD("highlandCorrections.mom_corrections.sigma_x");
+      double B       = ND::params().GetParameterD("highlandCorrections.mom_corrections.B");
+      double X0      = ND::params().GetParameterD("highlandCorrections.mom_corrections.x0");
+
+      double p_iv = anaUtils::ComputeInversePT(*cross)*units::GeV;
+
+      double sigma_inv_p_point = 1e-3/(300*B*LYZ*LYZ)*sigma_x*sqrt(720/(N+4));
+      double sigma_inv_p_MS    = 1e-3*0.016*p_iv/(300*B*LYZ*cos_lambda)*sqrt(LYZ/X0);
+      double sigma_inv_p       = sqrt(TMath::Power(sigma_inv_p_point,2)+TMath::Power(sigma_inv_p_MS,2));
+      //std::cout << "sigma comp.: " << LYZ << " " << cos_lambda << " " << N << " " << 1/p_iv << " " << sigma_inv_p_point << " " << sigma_inv_p_MS << " " << sigma_inv_p << std::endl;
+   
+      return sigma_inv_p;
+      /////////////////////////////////////////////////////////////////////////////////
+      */
+      if(sd.second[i].TrackLength>0 && NHits<2000){
+
+        ifTPC[NHits] = 1;
+
+	// point resolution for T2K TPC 0.7 um : https://arxiv.org/pdf/1012.0865.pdf
+        double xlocation = random2->Gaus((sd.second[i].Stop.X()+sd.second[i].Start.X())/2.,0.7);
+        double ylocation = random2->Gaus((sd.second[i].Stop.Y()+sd.second[i].Start.Y())/2.,0.7);
+        double zlocation = random2->Gaus((sd.second[i].Stop.Z()+sd.second[i].Start.Z())/2.,0.7);
+
+        prim[NHits] = sd.second[i].PrimaryId;
+        PDG[NHits] = event->Primaries[0].Particles[prim[NHits]].PDGCode;
+
+        trueMom = event->Primaries[0].Particles[prim[NHits]].Momentum.Energy();
+        trueLen = 0;
+        true3Mom[0]=event->Primaries[0].Particles[prim[NHits]].Momentum.Px();
+        true3Mom[1]=event->Primaries[0].Particles[prim[NHits]].Momentum.Py();
+        true3Mom[2]=event->Primaries[0].Particles[prim[NHits]].Momentum.Pz();
+
+        int primTemp = prim[NHits];
+        if(primTemp < 30){
+          true4Mom[primTemp][0] = event->Primaries[0].Particles[prim[NHits]].Momentum.Px();
+          true4Mom[primTemp][1] = event->Primaries[0].Particles[prim[NHits]].Momentum.Py();
+          true4Mom[primTemp][2] = event->Primaries[0].Particles[prim[NHits]].Momentum.Pz();
+          true4Mom[primTemp][3] = event->Primaries[0].Particles[prim[NHits]].Momentum.Energy();
+          trueCos[primTemp] = event->Primaries[0].Particles[prim[NHits]].Momentum.CosTheta();
+        }
+
+        hitLocation[NHits][0]=xlocation;
+        hitLocation[NHits][1]=ylocation;
+        hitLocation[NHits][2]=zlocation;
+
+        ener[NHits] = sd.second[i].EnergyDeposit;
+        NHits++;
+      }
+    }
 
     if(sd.first == "volCube" ){
       if(sd.second[i].TrackLength>0 && NHits<2000){
@@ -290,6 +398,86 @@ c->Fill();
 outFile->Write();
 outFile->Close();
 }
+
+
 int main(int argc, char* argv[]){
-    fineTransfer(argv[1],argv[2],atoi(argv[3]));
+
+  fineTransfer(argv[1],argv[2],atoi(argv[3]));
+
+  // Do kalman filter
+  //
+  std::cout<<"ready to run Kalman filter .."<<std::endl;
+  int n = 3; // Number of states
+  int m = 1; // Number of measurements
+
+  double dt = 1.0/30; // Time step
+
+  Eigen::MatrixXd A(n, n); // System dynamics matrix
+  Eigen::MatrixXd C(m, n); // Output matrix
+  Eigen::MatrixXd Q(n, n); // Process noise covariance
+  Eigen::MatrixXd R(m, m); // Measurement noise covariance
+  Eigen::MatrixXd P(n, n); // Estimate error covariance
+
+  // Discrete LTI projectile motion, measuring position only
+  A << 1, dt,  0,
+       0, 1, dt,
+       0, 0, 1;
+  C << 1, 0, 0;
+
+  // Reasonable covariance matrices
+  Q << .05, .05, .0, .05, .05, .0, .0, .0, .0;
+  R << 5;
+  P << .1, .1, .1, .1, 10000, 10, .1, 10, 100;
+
+  std::cout << "A: \n" << A << std::endl;
+  std::cout << "C: \n" << C << std::endl;
+  std::cout << "Q: \n" << Q << std::endl;
+  std::cout << "R: \n" << R << std::endl;
+  std::cout << "P: \n" << P << std::endl;
+
+  // Construct the filter
+  KalmanFilterAlgorithm kf(0, A, C, Q, R, P);
+
+  // set up measurements
+  std::vector<double> measurements ;
+
+  // Best guess of initial states
+  Eigen::VectorXd x0(n);
+  x0 << measurements[0], 0, 0; //-9.81;
+  kf.init(0, x0);
+
+  std::cout<<"creating ofstrem out "<<std::endl;
+  std::ofstream out2("/home/guang/work/Pandora/ExampleContent/build/outputExample.txt");
+
+  // Feed measurements into filter, output estimated states
+  double t              = 0;
+  double signVote       = 0;
+  double meanFirstOrder = 0.;
+  double meanSecondOrder= 0.;
+  Eigen::VectorXd y(m);
+  //std::cout << "t = " << t << ", " << "x_hat[0]: " << kf.state().transpose() << std::endl;
+  std::vector<double> outR;
+  for(int i = 0; i < measurements.size(); i++) {
+    t += dt;
+    y << measurements[i];
+    kf.update(y);
+    //std::cout << "t = " << t << ", " << "y[" << i << "] = " << y.transpose()
+    //    << ", x_hat[" << i << "] = " << kf.state().transpose() << std::endl;
+    std::cout<<i<<" measurements "<<y.transpose()<<" predictions "<<kf.state().transpose()<<std::endl;
+    //std::cout<<"test "<<kf.state().transpose()(0)<<"  |  "<<kf.state().transpose()(1)<<std::endl;
+    signVote += kf.state().transpose()(2);
+    meanFirstOrder  +=  kf.state().transpose()(1);
+    meanSecondOrder +=  kf.state().transpose()(2);
+    out2<<i<<" "<<measurements[i]<<" "<<kf.state().transpose()(0)<<std::endl;
+    outR.push_back(kf.state().transpose()(2));
+  }
+
+  meanFirstOrder /= measurements.size();
+  meanSecondOrder /= measurements.size();
+  int m_muonSign2 = 0;
+  if (signVote < 0)
+      m_muonSign2 = -1;
+  else
+      m_muonSign2 = 1;
+
 }
