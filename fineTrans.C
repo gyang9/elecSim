@@ -438,46 +438,50 @@ int main(int argc, char* argv[]){
   // Construct the filter
   KalmanFilterAlgorithm kf(0, A, C, Q, R, P);
 
+  int usePDG = 13;
+  TString useDet = "TPCp3DST";
   // set up measurements
-  std::vector<double> measurements ;
+  std::vector<std::vector<double>> _measurements = kf.readInMeasure(argv[2], usePDG, useDet);
+  std::vector<std::vector<double>> outR;
+  int mCount = 0;
 
-  // Best guess of initial states
-  Eigen::VectorXd x0(n);
-  x0 << measurements[0], 0, 0; //-9.81;
-  kf.init(0, x0);
+  for (Int_t iEvt = 0; iEvt < 100; iEvt){
+    std::vector<double> measurements = _measurements[iEvt];
+    // Best guess of initial states
+    Eigen::VectorXd x0(n);
+    x0 << measurements[0], 0, 0; //-9.81;
+    kf.init(0, x0);
 
-  std::cout<<"creating ofstrem out "<<std::endl;
-  std::ofstream out2("/home/guang/work/Pandora/ExampleContent/build/outputExample.txt");
+    // Feed measurements into filter, output estimated states
+    double t              = 0;
+    double signVote       = 0;
+    double meanFirstOrder = 0.;
+    double meanSecondOrder= 0.;
+    Eigen::VectorXd y(m);
+    //std::cout << "t = " << t << ", " << "x_hat[0]: " << kf.state().transpose() << std::endl;
+    for(int i = 0; i < measurements.size(); i++) {
+      t += dt;
+      y << measurements[i];
+      kf.update(y);
+      //std::cout << "t = " << t << ", " << "y[" << i << "] = " << y.transpose()
+      //    << ", x_hat[" << i << "] = " << kf.state().transpose() << std::endl;
+      std::cout<<i<<" measurements "<<y.transpose()<<" predictions "<<kf.state().transpose()<<std::endl;
+      //std::cout<<"test "<<kf.state().transpose()(0)<<"  |  "<<kf.state().transpose()(1)<<std::endl;
+      signVote += kf.state().transpose()(2);
+      meanFirstOrder  +=  kf.state().transpose()(1);
+      meanSecondOrder +=  kf.state().transpose()(2);
+      outR[iEvt].push_back(kf.state().transpose()(2));
+    }
 
-  // Feed measurements into filter, output estimated states
-  double t              = 0;
-  double signVote       = 0;
-  double meanFirstOrder = 0.;
-  double meanSecondOrder= 0.;
-  Eigen::VectorXd y(m);
-  //std::cout << "t = " << t << ", " << "x_hat[0]: " << kf.state().transpose() << std::endl;
-  std::vector<double> outR;
-  for(int i = 0; i < measurements.size(); i++) {
-    t += dt;
-    y << measurements[i];
-    kf.update(y);
-    //std::cout << "t = " << t << ", " << "y[" << i << "] = " << y.transpose()
-    //    << ", x_hat[" << i << "] = " << kf.state().transpose() << std::endl;
-    std::cout<<i<<" measurements "<<y.transpose()<<" predictions "<<kf.state().transpose()<<std::endl;
-    //std::cout<<"test "<<kf.state().transpose()(0)<<"  |  "<<kf.state().transpose()(1)<<std::endl;
-    signVote += kf.state().transpose()(2);
-    meanFirstOrder  +=  kf.state().transpose()(1);
-    meanSecondOrder +=  kf.state().transpose()(2);
-    out2<<i<<" "<<measurements[i]<<" "<<kf.state().transpose()(0)<<std::endl;
-    outR.push_back(kf.state().transpose()(2));
-  }
-
-  meanFirstOrder /= measurements.size();
-  meanSecondOrder /= measurements.size();
-  int m_muonSign2 = 0;
-  if (signVote < 0)
+    meanFirstOrder /= measurements.size();
+    meanSecondOrder /= measurements.size();
+    int m_muonSign2 = 0;
+    if (signVote < 0){
       m_muonSign2 = -1;
-  else
+      mCount++;
+    }  
+    else
       m_muonSign2 = 1;
-
+  }
+  std::cout<<"number of muons with negative sign : "<<mCount<<std::endl;
 }

@@ -11,6 +11,55 @@
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
+std::vector<std::vector<double>> KalmanFilterAlgorithm::readInMeasure(TString inFile, int pdg, TString det){
+
+  TFile infile(inFile);
+  TTree* t = (TTree*)infile.Get("EDepSimTree");
+
+  double hitLocation[2000][3]={};
+  double hitPE_mean[2000][3]={};
+  double hitPE_measure[2000][3]={};
+  double hitT[2000][3]={};
+  double hitPrim[2000]={};
+  int hitPDG[2000]={};
+  double hitE[2000]={};
+  double true4Mom[30][4]={};
+  int if3DST[2000]={};
+  int ifTPC[2000]={};
+  int use3DST=0;
+  int useTPC=0;
+  std::vector<std::vector<double>> output;
+
+  t->SetBranchAddress("hitLocation",&hitLocation);
+  t->SetBranchAddress("hitE",&hitE);
+  t->SetBranchAddress("hitPDG",&hitPDG);
+  t->SetBranchAddress("if3DST",&if3DST);
+  t->SetBranchAddress("ifTPC",&ifTPC);
+
+  if(det.Contains("TPC")){
+    useTPC = 1;
+  }
+  if(det.Contains("3DST")){
+    use3DST = 1;
+  }
+
+  for(Int_t i=0;i<t->GetEntries();i++){
+
+    t->GetEntry(i);
+    for(Int_t j=0;j<2000;j++){
+      if(if3DST[j] == use3DST && if3DST[j] == 1){
+        if(hitPDG[j] == pdg)
+          output[i].push_back(hitLocation[j][1]);    
+      }
+      else if(ifTPC[j] == useTPC && ifTPC[j] == 1){
+        if(hitPDG[j] == pdg)
+          output[i].push_back(hitLocation[j][1]);
+      }  
+    }
+  }
+  return output;
+}
+
 
 KalmanFilterAlgorithm::KalmanFilterAlgorithm(
     double kdt,
