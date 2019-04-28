@@ -77,7 +77,7 @@ Int_t intPoint =0;
 Int_t NHits = 0;
 Int_t hitPE_m[2000][3]={};
 
-TFile* outFile = TFile::Open("/home/guang/work/elecSim/PROD101/"+outputF,"RECREATE");
+TFile* outFile = TFile::Open("/home/guang/work/elecSim/"+outputF,"RECREATE");
 TTree* c = new TTree("EDepSimTree","EDepSimTree");
 c->Branch("event",&eventN,"event/I");
 c->Branch("hitLocation",&hitLocation,"hitLocation[2000][3]/D");
@@ -106,7 +106,7 @@ TTree* events = (TTree*) g.Get("EDepSimEvents");
 
 TG4Event* event=NULL;
 events->SetBranchAddress("Event",&event);
-Int_t nevent = 200;//events->GetEntries();
+Int_t nevent = 400;//events->GetEntries();
 
 Int_t StdHepPdgb[2000];
 Int_t StdHepStatusb[2000];
@@ -177,7 +177,7 @@ for(auto sd : event->SegmentDetectors)
   < highlandCorrections.mom_corrections.x0 = 115.103 > 
   */
 
-    if( sd.first.find('TPC') != std::string::npos ){
+    if( sd.first.find("TPC") ){
       /*
       ////////////////////////////////////////////////////////////////////////////
       // this function is used in superFGD	    
@@ -439,49 +439,64 @@ int main(int argc, char* argv[]){
   KalmanFilterAlgorithm kf(0, A, C, Q, R, P);
 
   int usePDG = 13;
-  TString useDet = "TPCp3DST";
+  TString useDet = "TPC_3DST";
   // set up measurements
-  std::vector<std::vector<double>> _measurements = kf.readInMeasure(argv[2], usePDG, useDet);
+  std::cout<<"reading in the measurement "<<std::endl;
+  std::vector<std::vector<double>> _measurements = kf.readInMeasure(argv[1], usePDG, useDet);
   std::vector<std::vector<double>> outR;
   int mCount = 0;
+  int iEvt = 0;
+  //std::vector<double> measurements;
+  std::cout<<"looping through the events "<<std::endl;
 
-  for (Int_t iEvt = 0; iEvt < 100; iEvt){
-    std::vector<double> measurements = _measurements[iEvt];
-    // Best guess of initial states
-    Eigen::VectorXd x0(n);
-    x0 << measurements[0], 0, 0; //-9.81;
-    kf.init(0, x0);
+  for(std::vector<std::vector<double>>::iterator measurements = _measurements.begin(); measurements != _measurements.end(); ++ measurements){
+  //for(std::vector<std::vector<double>>::iterator iloop = _measurements.begin(); iloop != _measurements.end(); ++ iloop){
 
-    // Feed measurements into filter, output estimated states
-    double t              = 0;
-    double signVote       = 0;
-    double meanFirstOrder = 0.;
-    double meanSecondOrder= 0.;
-    Eigen::VectorXd y(m);
-    //std::cout << "t = " << t << ", " << "x_hat[0]: " << kf.state().transpose() << std::endl;
-    for(int i = 0; i < measurements.size(); i++) {
-      t += dt;
-      y << measurements[i];
-      kf.update(y);
-      //std::cout << "t = " << t << ", " << "y[" << i << "] = " << y.transpose()
-      //    << ", x_hat[" << i << "] = " << kf.state().transpose() << std::endl;
-      std::cout<<i<<" measurements "<<y.transpose()<<" predictions "<<kf.state().transpose()<<std::endl;
-      //std::cout<<"test "<<kf.state().transpose()(0)<<"  |  "<<kf.state().transpose()(1)<<std::endl;
-      signVote += kf.state().transpose()(2);
-      meanFirstOrder  +=  kf.state().transpose()(1);
-      meanSecondOrder +=  kf.state().transpose()(2);
-      outR[iEvt].push_back(kf.state().transpose()(2));
+    //for(std::vector<double>::iterator jloop = iloop->begin(); jloop != iloop->end(); ++ jloop){
+      //measurements.push_back(jloop);
+      //std::cout<<jloop<<std::endl;
+    //}
+   
+    std::cout<<"size of the event hit list: "<<measurements->size()<<std::endl; 
+    if(measurements->size()>3){
+      // Best guess of initial states
+      Eigen::VectorXd x0(n);
+      x0 << measurements->at(0), 0, 0; //-9.81;
+      kf.init(0, x0);
+
+      // Feed measurements into filter, output estimated states
+      double t              = 0;
+      double signVote       = 0;
+      double meanFirstOrder = 0.;
+      double meanSecondOrder= 0.;
+      Eigen::VectorXd y(m);
+      //std::cout << "t = " << t << ", " << "x_hat[0]: " << kf.state().transpose() << std::endl;
+      for(int i = 0; i < measurements->size(); i++) {
+      //for (std::vector<double>::iterator i = measurements->begin(); i != measurements->end(); i++) {
+        t += dt;
+        y << measurements->at(i);
+        kf.update(y);
+        //std::cout << "t = " << t << ", " << "y[" << i << "] = " << y.transpose()
+        //    << ", x_hat[" << i << "] = " << kf.state().transpose() << std::endl;
+        std::cout<<"event "<<iEvt<<" "<<i<<" measurements "<<y.transpose()<<" predictions "<<kf.state().transpose()<<std::endl;
+        //std::cout<<"test "<<kf.state().transpose()(0)<<"  |  "<<kf.state().transpose()(1)<<std::endl;
+        signVote += kf.state().transpose()(2);
+        meanFirstOrder  +=  kf.state().transpose()(1);
+        meanSecondOrder +=  kf.state().transpose()(2);
+        //outR[iEvt].push_back(kf.state().transpose()(2));
+      }
+      iEvt ++;
+
+      meanFirstOrder /= measurements->size();
+      meanSecondOrder /= measurements->size();
+      int m_muonSign2 = 0;
+      if (signVote < 0){
+        m_muonSign2 = -1;
+        mCount++;
+      }  
+      else
+        m_muonSign2 = 1;
     }
-
-    meanFirstOrder /= measurements.size();
-    meanSecondOrder /= measurements.size();
-    int m_muonSign2 = 0;
-    if (signVote < 0){
-      m_muonSign2 = -1;
-      mCount++;
-    }  
-    else
-      m_muonSign2 = 1;
   }
-  std::cout<<"number of muons with negative sign : "<<mCount<<std::endl;
+  std::cout<<"total number of events "<<iEvt<<" ; number of muons with negative sign : "<<mCount<<std::endl;
 }

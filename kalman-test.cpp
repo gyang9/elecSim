@@ -13,9 +13,10 @@
 
 std::vector<std::vector<double>> KalmanFilterAlgorithm::readInMeasure(TString inFile, int pdg, TString det){
 
-  TFile infile(inFile);
+  TFile infile("/home/guang/work/elecSim/"+inFile);
   TTree* t = (TTree*)infile.Get("EDepSimTree");
 
+  std::cout<<"inside the readInMeasure() "<<std::endl;
   double hitLocation[2000][3]={};
   double hitPE_mean[2000][3]={};
   double hitPE_measure[2000][3]={};
@@ -43,19 +44,25 @@ std::vector<std::vector<double>> KalmanFilterAlgorithm::readInMeasure(TString in
     use3DST = 1;
   }
 
+  std::vector<double> temp;
   for(Int_t i=0;i<t->GetEntries();i++){
 
     t->GetEntry(i);
+
     for(Int_t j=0;j<2000;j++){
-      if(if3DST[j] == use3DST && if3DST[j] == 1){
-        if(hitPDG[j] == pdg)
-          output[i].push_back(hitLocation[j][1]);    
+      if(if3DST[j] == use3DST && use3DST == 1){
+        if(hitPDG[j] == pdg){
+          temp.push_back(hitLocation[j][1]);    
+	}
       }
-      else if(ifTPC[j] == useTPC && ifTPC[j] == 1){
-        if(hitPDG[j] == pdg)
-          output[i].push_back(hitLocation[j][1]);
+      else if(ifTPC[j] == useTPC && useTPC == 1){
+        if(hitPDG[j] == pdg){
+          temp.push_back(hitLocation[j][1]);
+	}
       }  
     }
+    output.push_back(temp);
+    temp.erase (temp.begin(),temp.end());
   }
   return output;
 }
