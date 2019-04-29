@@ -101,12 +101,12 @@ c->Branch("ifTPC",&ifTPC,"ifTPC[2000]/I");
 //c->Branch("hitLowQ",&loQ,"hitLowQ[3]/D");
 //c->Branch("hitLowADC",&loadc,"hitLowADC[3]/D");
 
-TFile g("/home/guang/work/elecSim/PROD101/"+inputF);
+TFile g("/home/guang/work/elecSim/PROD104/"+inputF);
 TTree* events = (TTree*) g.Get("EDepSimEvents");
 
 TG4Event* event=NULL;
 events->SetBranchAddress("Event",&event);
-Int_t nevent = 400;//events->GetEntries();
+Int_t nevent = events->GetEntries();
 
 Int_t StdHepPdgb[2000];
 Int_t StdHepStatusb[2000];
@@ -471,6 +471,7 @@ int main(int argc, char* argv[]){
       double meanSecondOrder= 0.;
       Eigen::VectorXd y(m);
       //std::cout << "t = " << t << ", " << "x_hat[0]: " << kf.state().transpose() << std::endl;
+      double latest = 0.;
       for(int i = 0; i < measurements->size(); i++) {
       //for (std::vector<double>::iterator i = measurements->begin(); i != measurements->end(); i++) {
         t += dt;
@@ -484,13 +485,14 @@ int main(int argc, char* argv[]){
         meanFirstOrder  +=  kf.state().transpose()(1);
         meanSecondOrder +=  kf.state().transpose()(2);
         //outR[iEvt].push_back(kf.state().transpose()(2));
+	latest = kf.state().transpose()(2);
       }
       iEvt ++;
 
       meanFirstOrder /= measurements->size();
       meanSecondOrder /= measurements->size();
       int m_muonSign2 = 0;
-      if (signVote < 0){
+      if (latest < 0){
         m_muonSign2 = -1;
         mCount++;
       }  
