@@ -7,11 +7,12 @@
  */
 
 #include "kalman-test.h"
+#include <TF1.h>
 #include <fstream>
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-std::vector<std::vector<double>> KalmanFilterAlgorithm::readInMeasure(TString inFile, int pdg, TString det){
+std::vector<std::vector<double*>> KalmanFilterAlgorithm::readInMeasure(TString inFile, int pdg, TString det){
 
   TFile infile("/home/guang/work/elecSim/"+inFile);
   TTree* t = (TTree*)infile.Get("EDepSimTree");
@@ -29,7 +30,7 @@ std::vector<std::vector<double>> KalmanFilterAlgorithm::readInMeasure(TString in
   int ifTPC[2000]={};
   int use3DST=0;
   int useTPC=0;
-  std::vector<std::vector<double>> output;
+  std::vector<std::vector<double*>> output;
 
   t->SetBranchAddress("hitLocation",&hitLocation);
   t->SetBranchAddress("hitE",&hitE);
@@ -44,7 +45,8 @@ std::vector<std::vector<double>> KalmanFilterAlgorithm::readInMeasure(TString in
     use3DST = 1;
   }
 
-  std::vector<double> temp;
+  std::vector<double*> temp;
+  double tem[3];
   for(Int_t i=0;i<t->GetEntries();i++){
 
     t->GetEntry(i);
@@ -52,12 +54,20 @@ std::vector<std::vector<double>> KalmanFilterAlgorithm::readInMeasure(TString in
     for(Int_t j=0;j<2000;j++){
       if(if3DST[j] == use3DST && use3DST == 1){
         if(hitPDG[j] == pdg){
-          temp.push_back(hitLocation[j][1]);    
+	  // the coordinate in KF is different, so use this:	
+	  tem[0] = hitLocation[j][2];
+	  tem[1] = hitLocation[j][1];
+	  tem[2] = hitLocation[j][0];
+          temp.push_back(tem);    
 	}
       }
       else if(ifTPC[j] == useTPC && useTPC == 1){
         if(hitPDG[j] == pdg){
-          temp.push_back(hitLocation[j][1]);
+          // the coordinate in KF is different, so use this:    
+          tem[0] = hitLocation[j][2];
+          tem[1] = hitLocation[j][1];
+          tem[2] = hitLocation[j][0];
+          temp.push_back(tem);
 	}
       }  
     }
@@ -66,7 +76,6 @@ std::vector<std::vector<double>> KalmanFilterAlgorithm::readInMeasure(TString in
   }
   return output;
 }
-
 
 KalmanFilterAlgorithm::KalmanFilterAlgorithm(
     double kdt,
@@ -83,6 +92,223 @@ KalmanFilterAlgorithm::KalmanFilterAlgorithm(
 }
 
 
+//http://www-jlc.kek.jp/subg/offl/kaltest/doc/ReferenceManual.pdf
+Eigen::MatrixXd KalmanFilterAlgorithm::projection(double drho, double theta0, double kappa, double dz, double tanlambda, double theta){
+  Eigen::MatrixXd AA(5,3);
+  double alpha = 1./(300. * 0.4);
+  AA<< TMath::Cos(theta0), TMath::Sin(theta0), 0,
+       -(drho + alpha/kappa)*TMath::Sin(theta0) + (alpha/kappa)*TMath::Sin(theta0+theta),
+       (drho + alpha/kappa)*TMath::Cos(theta0) - (alpha/kappa)*TMath::Cos(theta0+theta), 0,
+       -(alpha/(kappa*kappa))* (TMath::Cos(theta0) - TMath::Cos(theta0-theta)),
+       -(alpha/(kappa*kappa))*(TMath::Sin(theta0) - TMath::Sin(theta0-theta)), (alpha/(kappa*kappa))*theta*tanlambda,
+       0, 0, 1,
+       0, 0, -(alpha/kappa)*theta;
+  return AA.transpose();
+}
+
+Eigen::MatrixXd KalmanFilterAlgorithm::projection(Eigen::VectorXd v, double theta){
+  return projection(v(0), v(1), v(2), v(3), v(4), theta);
+}
+
+
+Eigen::MatrixXd KalmanFilterAlgorithm::propagate(double drho, double theta0, double kappa, double dz, double tanlambda, 
+		double drho_prime, double theta0_prime, double kappa_prime, double dz_prime, double tanlambda_prime){
+  Eigen::MatrixXd AA(5,5);
+  double alpha = 1./(300. * 0.4);
+  double aa = -TMath::Power((drho_prime + alpha/kappa),-1) * TMath::Sin(theta0_prime - theta0);
+  double ab = (drho + alpha/kappa)*TMath::Power((drho_prime + alpha/kappa),-1) * TMath::Cos(theta0_prime - theta0);
+  double ac = alpha/(kappa*kappa) * TMath::Power((drho_prime + alpha/kappa),-1) * TMath::Sin(theta0_prime - theta0);
+  double ad = 0;
+  double ae = 0;
+
+  std::cout<<"finished one propagate "<<std::endl;
+  double ba = TMath::Cos(theta0_prime - theta0);
+  double bb = (drho_prime + alpha/kappa) * TMath::Sin(theta0_prime - theta0);
+  double bc = alpha/(kappa*kappa) * (1- TMath::Cos(theta0_prime - theta0));
+  double bd = 0;
+  double be = 0;
+
+  std::cout<<"finished two propagate "<<std::endl;
+  double ca = 0;
+  double cb = 0;
+  double cc = 1;
+  double cd = 0;
+  double ce = 0;
+
+  double ea = 0;
+  double eb = 0;
+  double ec = 0;
+  double ed = 0;
+  double ee = 1;
+ 
+  double da = (alpha/kappa) * TMath::Power(drho_prime + alpha/kappa,-1) * tanlambda * TMath::Sin(theta0_prime - theta0);
+  double db = (alpha/kappa) * tanlambda * (1 - (drho+alpha/kappa) * TMath::Power(drho_prime + alpha/kappa,-1) * TMath::Cos(theta0_prime - theta0));
+  double dc = alpha/(kappa*kappa) * tanlambda * (theta0_prime - theta0 - (alpha/kappa) * TMath::Power(drho_prime + alpha/kappa,-1) * TMath::Sin(theta0_prime - theta0));
+  double dd = 1; 
+  double de = -(alpha/kappa) * (theta0_prime - theta0);
+
+  std::cout<<"finished all propagate "<<std::endl;
+  AA << ba, bb, bc, bd, be,
+        aa, ab, ac, ad, ae,
+	ca, cb, cc, cd, ce,
+        da, db, dc, dd, de,
+	ea, eb, ec, ed, ee;
+  std::cout<<AA<<std::endl;
+  return AA;
+}
+
+Eigen::MatrixXd KalmanFilterAlgorithm::propagate(Eigen::VectorXd v, Eigen::VectorXd v_prime){
+  return propagate (v(0), v(1), v(2), v(3), v(4), v_prime(0), v_prime(1), v_prime(2), v_prime(3), v_prime(4) );
+}	
+
+
+// https://ww2.odu.edu/~skuhn/NucPhys/KalmanFilter.pdf
+// http://www-jlc.kek.jp/subg/offl/lib/docs/helix_manip/node3.html
+// kappa = Q/Pt ; rho = alpha/kappa; alpha = 1/cB
+// with Q being the charge, $\rho$ being the signed radius of the helix, and $\alpha \equiv 1/c B$ being a magnetic-field-dependent constant, dz is the distrance of the helix from the pivotal point in the z direction, and $\tan\lambda$ is the dip angle. 
+// $d_\rho$ is the distance of the helix from the pivotal point in the xy plane, $\phi_0$ is the azimuthal angle to specifies the pivotal point with respect to the helix center, $\kappa$ is the signed reciprocal transverse momentum
+
+Eigen::MatrixXd KalmanFilterAlgorithm::currentPropagator(double drho, double theta0, double kappa, double dz, double tanlambda, Eigen::VectorXd& x0, double theta){
+  
+  double alpha = 1./ (300. * 0.4);
+
+  double Xc = x0(0) + (drho + alpha/kappa)* TMath::Cos(theta0);
+  double Yc = x0(1) + (drho + alpha/kappa)* TMath::Sin(theta0);	  
+  
+  double x_prime = x0_prime(x0(0), drho, theta0, alpha, kappa, theta);
+  double y_prime = y0_prime(x0(1), drho, theta0, alpha, kappa, theta);
+  double z_prime = z0_prime(x0(2), dz, alpha, kappa, tanlambda, theta);
+
+  double par[5] = {};
+  double xx[5] = {};
+
+  par[0] = drho;
+  par[1] = theta0;
+  par[2] = kappa;
+  par[3] = dz;
+  par[4] = tanlambda;
+
+  xx[0] = x0(0);
+  xx[1] = x0(1);
+  xx[2] = alpha;
+  xx[3] = theta;
+  xx[4] = theta0_prime(xx, par);
+  double tt = xx[4];
+
+  TF1* f1 = new TF1("f1", theta0_prime(xx, par), -100000, 100000, 5);
+  Double_t derivative1[5]={};
+  f1->GradientPar(xx, derivative1);
+
+  TF1* f2 = new TF1("f2", drho_prime(xx, par), -100000, 100000, 5);
+  Double_t derivative2[5]={};
+  f2->GradientPar(xx, derivative2);
+
+  TF1* f3 = new TF1("f3", kappa_prime(xx, par), -100000, 100000, 5);
+  Double_t derivative3[5]={};
+  f3->GradientPar(xx, derivative3);
+
+  xx[0] = x0(2);
+  xx[1] = alpha;
+  xx[2] = tt;
+  xx[3] = theta;
+
+  TF1* f4 = new TF1("f4", dz_prime(xx, par), -100000, 100000, 5);
+  Double_t derivative4[5]={};
+  f4->GradientPar(xx, derivative4);
+
+  TF1* f5 = new TF1("f5", tanlambda_prime(xx, par), -100000, 100000, 5);
+  Double_t derivative5[5]={};
+  f5->GradientPar(xx, derivative5);  
+
+  Eigen::MatrixXd AA(5, 5); 
+  AA<< derivative1[0], derivative1[1], derivative1[2], derivative1[3], derivative1[4],
+       derivative2[0], derivative2[1], derivative2[2], derivative2[3], derivative2[4],
+       derivative3[0], derivative3[1], derivative3[2], derivative3[3], derivative3[4],
+       derivative4[0], derivative4[1], derivative4[2], derivative4[3], derivative4[4],
+       derivative5[0], derivative5[1], derivative5[2], derivative5[3], derivative5[4];
+  return AA;
+}
+
+Double_t KalmanFilterAlgorithm::x0_prime(double x0, double drho, double theta0, double alpha, double kappa, double theta){
+  return x0 + drho*TMath::Cos(theta0) + (alpha/kappa)*(TMath::Cos(theta0)- TMath::Cos(theta0+theta));
+}
+
+Double_t KalmanFilterAlgorithm::y0_prime(double x0, double drho, double theta0, double alpha, double kappa, double theta){
+  return x0 + drho*TMath::Sin(theta0) + (alpha/kappa)*(TMath::Sin(theta0)- TMath::Sin(theta0+theta));
+}	
+
+Double_t KalmanFilterAlgorithm::z0_prime(double x0, double dz, double alpha, double kappa, double tanlambda, double theta){
+  return x0 + dz - (alpha/kappa) * tanlambda * theta;
+}
+
+Double_t KalmanFilterAlgorithm::drho_prime(double* xx, double* par){
+  double drho = par[0];
+  double theta0 = par[1];
+  double kappa = par[2];
+  double dz = par[3];
+  double tanlambda = par[4];
+
+  double x0 = xx[0];
+  double y0 = xx[1];
+  double alpha = xx[2];
+  double theta = xx[3];
+  double theta0_prime = xx[4];
+
+  double Xc = x0 + (drho + alpha/kappa)* TMath::Cos(theta0);
+  double Yc = y0 + (drho + alpha/kappa)* TMath::Sin(theta0);
+  double x0_prime = x0 + drho*TMath::Cos(theta0) + (alpha/kappa)*(TMath::Cos(theta0)- TMath::Cos(theta0+theta));
+  double y0_prime = y0 + drho*TMath::Sin(theta0) + (alpha/kappa)*(TMath::Sin(theta0)- TMath::Sin(theta0+theta));  
+  return (Xc - x0_prime)* TMath::Cos(theta0_prime) + (Yc - y0_prime) * TMath::Sin(theta0_prime) - kappa/alpha;
+}
+
+Double_t KalmanFilterAlgorithm::theta0_prime(double* xx, double* par){
+
+  double drho = par[0];
+  double theta0 = par[1];
+  double kappa = par[2];
+  double dz = par[3];
+  double tanlambda = par[4];
+
+  double x0 = xx[0];
+  double y0 = xx[1];
+  double alpha = xx[2];
+  double theta = xx[3];
+
+  double Xc = x0 + (drho + alpha/kappa)* TMath::Cos(theta0);
+  double Yc = y0 + (drho + alpha/kappa)* TMath::Sin(theta0);
+  double x0_prime = x0 + drho*TMath::Cos(theta0) + (alpha/kappa)*(TMath::Cos(theta0)- TMath::Cos(theta0+theta));
+  double y0_prime = y0 + drho*TMath::Sin(theta0) + (alpha/kappa)*(TMath::Sin(theta0)- TMath::Sin(theta0+theta));
+
+  return 1./ (TMath::Tan((y0_prime - Yc)/(x0_prime - Xc)));
+}
+
+Double_t KalmanFilterAlgorithm::kappa_prime(double* xx, double* par){
+  double kappa = par[2];
+  return kappa;
+}
+
+Double_t KalmanFilterAlgorithm::dz_prime (double* xx, double* par){
+  double drho = par[0];
+  double theta0 = par[1];
+  double kappa = par[2];
+  double dz = par[3];
+  double tanlambda = par[4];
+
+  double z0 = xx[0];
+  double alpha = xx[1];
+  double theta0_prime = xx[2];
+  double theta = xx[3];    
+
+  double z0_prime = z0 + dz - (alpha/kappa) * tanlambda * theta;
+
+  return z0 - z0_prime + dz - (alpha/kappa) * (theta0_prime - theta0) * tanlambda;
+}
+
+Double_t KalmanFilterAlgorithm::tanlambda_prime (double* xx, double* par){
+  double tanlambda = par[4];
+  return tanlambda;
+}
+
 void KalmanFilterAlgorithm::init(double t0, const Eigen::VectorXd& x0) {
   kx_hat = x0;
   kP = kP0;
@@ -91,14 +317,16 @@ void KalmanFilterAlgorithm::init(double t0, const Eigen::VectorXd& x0) {
   kinitialized = true;
 }
 
-
 void KalmanFilterAlgorithm::update(const Eigen::VectorXd& y) {
 
   if(!kinitialized)
     throw std::runtime_error("Filter is not initialized!");
-
+  
+  // predict
   kx_hat_new = kA * kx_hat;
   kP = kA*kP*kA.transpose() + kQ;
+
+  // update
   kK = kP*kC.transpose()*(kC*kP*kC.transpose() + kR).inverse();
   kx_hat_new += kK * (y - kC*kx_hat_new);
   kP = (kI - kK*kC)*kP;
@@ -107,10 +335,11 @@ void KalmanFilterAlgorithm::update(const Eigen::VectorXd& y) {
   kt += kdt;
 }
 
-void KalmanFilterAlgorithm::update(const Eigen::VectorXd& y, double dt, const Eigen::MatrixXd A) {
+void KalmanFilterAlgorithm::update(const Eigen::VectorXd& y, double dt, const Eigen::MatrixXd A, const Eigen::MatrixXd C) {
 
   this->kA = A;
   this->kdt = dt;
+  this->kC = C;
   update(y);
 }
 

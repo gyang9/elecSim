@@ -402,13 +402,13 @@ outFile->Close();
 
 int main(int argc, char* argv[]){
 
-  fineTransfer(argv[1],argv[2],atoi(argv[3]));
+  //fineTransfer(argv[1],argv[2],atoi(argv[3]));
 
   // Do kalman filter
   //
   std::cout<<"ready to run Kalman filter .."<<std::endl;
-  int n = 3; // Number of states
-  int m = 1; // Number of measurements
+  int n = 5; // Number of states
+  int m = 3; // Number of measurements
 
   double dt = 1.0/30; // Time step
 
@@ -419,15 +419,29 @@ int main(int argc, char* argv[]){
   Eigen::MatrixXd P(n, n); // Estimate error covariance
 
   // Discrete LTI projectile motion, measuring position only
-  A << 1, dt,  0,
-       0, 1, dt,
-       0, 0, 1;
-  C << 1, 0, 0;
+  A << 1, 0, 0, 0, 0,
+       0, 1, 0, 0, 0,
+       0, 0, 1, 0, 0,
+       0, 0, 0, 1, 0,
+       0, 0, 0, 0, 1;
+  C << 1, 0, 0, 0, 0,
+       0, 1, 0, 0, 0,
+       0, 0, 1, 0, 0;
 
   // Reasonable covariance matrices
-  Q << .05, .05, .0, .05, .05, .0, .0, .0, .0;
-  R << 5;
-  P << .1, .1, .1, .1, 10000, 10, .1, 10, 100;
+  Q << 1, .05, .05, .0, .0,
+       .05, 1, .05, .0, .0,
+       .05, .05, 1, .0, .05,
+       .0, .0, .0, 1, .05,
+       .0, .0, .0, .0, 1,
+  R << 1, 0, 0,
+       0, 1, 0,
+       0, 0, 1;
+  P << 100, 1, 1, 1, 1,
+       1, 100, 1, 1, 1,
+       1, 1, 100, 1, 1,
+       1, 1, 1, 100, 1,
+       1, 1, 1, 1, 100;
 
   std::cout << "A: \n" << A << std::endl;
   std::cout << "C: \n" << C << std::endl;
@@ -442,14 +456,14 @@ int main(int argc, char* argv[]){
   TString useDet = "TPC_3DST";
   // set up measurements
   std::cout<<"reading in the measurement "<<std::endl;
-  std::vector<std::vector<double>> _measurements = kf.readInMeasure(argv[1], usePDG, useDet);
+  std::vector<std::vector<double*>> _measurements = kf.readInMeasure(argv[1], usePDG, useDet);
   std::vector<std::vector<double>> outR;
   int mCount = 0;
   int iEvt = 0;
   //std::vector<double> measurements;
   std::cout<<"looping through the events "<<std::endl;
 
-  for(std::vector<std::vector<double>>::iterator measurements = _measurements.begin(); measurements != _measurements.end(); ++ measurements){
+  for(std::vector<std::vector<double*>>::iterator measurements = _measurements.begin(); measurements != _measurements.end(); ++ measurements){
   //for(std::vector<std::vector<double>>::iterator iloop = _measurements.begin(); iloop != _measurements.end(); ++ iloop){
 
     //for(std::vector<double>::iterator jloop = iloop->begin(); jloop != iloop->end(); ++ jloop){
@@ -460,8 +474,10 @@ int main(int argc, char* argv[]){
     std::cout<<"size of the event hit list: "<<measurements->size()<<std::endl; 
     if(measurements->size()>3){
       // Best guess of initial states
+      Eigen::VectorXd beforeUpdate(n);
       Eigen::VectorXd x0(n);
-      x0 << measurements->at(0), 0, 0; //-9.81;
+      beforeUpdate<< 0, 0, 1, 0, 0;
+      x0 << 0, 0, 1, 0, 0; //-9.81;
       kf.init(0, x0);
 
       // Feed measurements into filter, output estimated states
@@ -470,13 +486,19 @@ int main(int argc, char* argv[]){
       double meanFirstOrder = 0.;
       double meanSecondOrder= 0.;
       Eigen::VectorXd y(m);
-      //std::cout << "t = " << t << ", " << "x_hat[0]: " << kf.state().transpose() << std::endl;
+      std::cout << "t = " << t << ", " << "x_hat[0]: " << kf.state().transpose() << std::endl;
       double latest = 0.;
       for(int i = 0; i < measurements->size(); i++) {
       //for (std::vector<double>::iterator i = measurements->begin(); i != measurements->end(); i++) {
         t += dt;
-        y << measurements->at(i);
-        kf.update(y);
+	std::cout<<"doing propagate , beforeUpdate and kf state "<<beforeUpdate.transpose() <<" "<< kf.state().transpose()<<std::endl;
+	Eigen::MatrixXd AA = kf.propagate(beforeUpdate, kf.state());
+	std::cout<<"doing projection"<<std::endl;
+	Eigen::MatrixXd CC = kf.projection(kf.state(), 0.01);
+        y << (measurements->at(i))[0], (measurements->at(i))[1], (measurements->at(i))[2];
+        beforeUpdate = kf.state();
+	std::cout<<"updating "<<std::endl;
+	kf.update(y, t, AA, CC);
         //std::cout << "t = " << t << ", " << "y[" << i << "] = " << y.transpose()
         //    << ", x_hat[" << i << "] = " << kf.state().transpose() << std::endl;
         std::cout<<"event "<<iEvt<<" "<<i<<" measurements "<<y.transpose()<<" predictions "<<kf.state().transpose()<<std::endl;
