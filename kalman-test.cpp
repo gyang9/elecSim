@@ -12,7 +12,7 @@
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-std::vector<std::vector<double*>> KalmanFilterAlgorithm::readInMeasure(TString inFile, int pdg, TString det){
+std::vector<std::vector<std::vector<double>>> KalmanFilterAlgorithm::readInMeasure(TString inFile, int pdg, TString det){
 
   TFile infile("/home/guang/work/elecSim/"+inFile);
   TTree* t = (TTree*)infile.Get("EDepSimTree");
@@ -30,7 +30,7 @@ std::vector<std::vector<double*>> KalmanFilterAlgorithm::readInMeasure(TString i
   int ifTPC[2000]={};
   int use3DST=0;
   int useTPC=0;
-  std::vector<std::vector<double*>> output;
+  std::vector<std::vector<std::vector<double>>> output;
 
   t->SetBranchAddress("hitLocation",&hitLocation);
   t->SetBranchAddress("hitE",&hitE);
@@ -45,32 +45,39 @@ std::vector<std::vector<double*>> KalmanFilterAlgorithm::readInMeasure(TString i
     use3DST = 1;
   }
 
-  std::vector<double*> temp;
-  double tem[3];
+  //std::vector<double*> temp;
+  //double tem[3];
   for(Int_t i=0;i<t->GetEntries();i++){
 
     t->GetEntry(i);
 
+    std::vector<std::vector<double>> temp;
+    std::vector<double> tem;
     for(Int_t j=0;j<2000;j++){
       if(if3DST[j] == use3DST && use3DST == 1){
         if(hitPDG[j] == pdg){
 	  // the coordinate in KF is different, so use this:	
-	  tem[0] = hitLocation[j][2];
-	  tem[1] = hitLocation[j][1];
-	  tem[2] = hitLocation[j][0];
+	  tem.push_back( hitLocation[j][1]);
+	  tem.push_back( hitLocation[j][2]);
+	  tem.push_back( hitLocation[j][0]);
+	  //std::cout<< tem[0]<<std::endl;
           temp.push_back(tem);    
 	}
       }
       else if(ifTPC[j] == useTPC && useTPC == 1){
         if(hitPDG[j] == pdg){
           // the coordinate in KF is different, so use this:    
-          tem[0] = hitLocation[j][2];
-          tem[1] = hitLocation[j][1];
-          tem[2] = hitLocation[j][0];
+          tem.push_back( hitLocation[j][1]);
+          tem.push_back( hitLocation[j][2]);
+          tem.push_back( hitLocation[j][0]);
           temp.push_back(tem);
 	}
-      }  
+      }
+      tem.erase (tem.begin(), tem.end());  
     }
+    //for(Int_t itest = 0; itest< temp.size(); itest++)
+    //  std::cout<<temp.size()<<" "<<(temp.at(itest))[0]<<" "<<std::endl; //<<(temp.at(itest))[1]<<" "<<(temp.at(itest))[2]<<std::endl;
+    //std::cout<<"------------------------------------"<<std::endl;
     output.push_back(temp);
     temp.erase (temp.begin(),temp.end());
   }

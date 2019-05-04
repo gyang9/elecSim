@@ -27,7 +27,7 @@ public:
     );
 
   // read in the electronics simulated files
-  std::vector<std::vector<double*>> readInMeasure(TString t, int pdg, TString det);
+  std::vector<std::vector<std::vector<double>>> readInMeasure(TString t, int pdg, TString det);
 
   // Matrices for computation
   Eigen::MatrixXd kA, kC, kQ, kR, kP, kK, kP0;
@@ -113,7 +113,7 @@ public:
 
   double depositEnergy ;
   double trueEnergy;
-  std::vector<double> measurements;
+  //std::vector<double*> measurements;
 
   std::string         m_inputCaloHitListName;             ///< The input calo hit list name
   std::string         m_outputCaloHitListName;           ///< The output calo hit list name for TPC_VIEW_U hits

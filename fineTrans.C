@@ -235,7 +235,7 @@ for(auto sd : event->SegmentDetectors)
 	// point resolution for T2K TPC 0.7 um : https://arxiv.org/pdf/1012.0865.pdf
         double xlocation = random2->Gaus((sd.second[i].Stop.X()+sd.second[i].Start.X())/2.,0.7);
         double ylocation = random2->Gaus((sd.second[i].Stop.Y()+sd.second[i].Start.Y())/2.,0.7);
-        double zlocation = random2->Gaus((sd.second[i].Stop.Z()+sd.second[i].Start.Z())/2.,0.7);
+        double zlocation = random2->Gaus((sd.second[i].Stop.Z()+sd.second[i].Start.Z())/2.-5000. ,0.7);
 
         prim[NHits] = sd.second[i].PrimaryId;
         PDG[NHits] = event->Primaries[0].Particles[prim[NHits]].PDGCode;
@@ -280,7 +280,7 @@ for(auto sd : event->SegmentDetectors)
 
         double xlocation = aveX*10. + 5 + 0.;
         double ylocation = aveY*10. + 5 + 0.;
-        double zlocation = aveZ*10. + 5 + 500.;
+        double zlocation = aveZ*10. + 5 + 500. - 5500;
 
         prim[NHits] = sd.second[i].PrimaryId;
         PDG[NHits] = event->Primaries[0].Particles[prim[NHits]].PDGCode; 
@@ -402,10 +402,16 @@ outFile->Close();
 
 int main(int argc, char* argv[]){
 
-  //fineTransfer(argv[1],argv[2],atoi(argv[3]));
+  fineTransfer(argv[1],argv[2],atoi(argv[3]));
 
   // Do kalman filter
   //
+  TH2D* h2[20];
+  TH2D* h22[20];
+  for(int i=0;i<20;i++){ 
+    h2[i] = new TH2D("","",2000,-1000,1000,2400,-1200,1200);
+    h22[i] = new TH2D("","",2000,-1000,1000,2400,-1200,1200);
+  }
   std::cout<<"ready to run Kalman filter .."<<std::endl;
   int n = 5; // Number of states
   int m = 3; // Number of measurements
@@ -452,18 +458,18 @@ int main(int argc, char* argv[]){
   // Construct the filter
   KalmanFilterAlgorithm kf(0, A, C, Q, R, P);
 
-  int usePDG = 13;
-  TString useDet = "TPC_3DST";
+  int usePDG = -13;
+  TString useDet = "3DST";
   // set up measurements
   std::cout<<"reading in the measurement "<<std::endl;
-  std::vector<std::vector<double*>> _measurements = kf.readInMeasure(argv[1], usePDG, useDet);
+  std::vector<std::vector<std::vector<double>>> _measurements = kf.readInMeasure(argv[1], usePDG, useDet);
   std::vector<std::vector<double>> outR;
   int mCount = 0;
   int iEvt = 0;
   //std::vector<double> measurements;
   std::cout<<"looping through the events "<<std::endl;
 
-  for(std::vector<std::vector<double*>>::iterator measurements = _measurements.begin(); measurements != _measurements.end(); ++ measurements){
+  for(std::vector<std::vector<std::vector<double>>>::iterator measurements = _measurements.begin(); measurements != _measurements.end(); ++ measurements){
   //for(std::vector<std::vector<double>>::iterator iloop = _measurements.begin(); iloop != _measurements.end(); ++ iloop){
 
     //for(std::vector<double>::iterator jloop = iloop->begin(); jloop != iloop->end(); ++ jloop){
@@ -489,23 +495,30 @@ int main(int argc, char* argv[]){
       std::cout << "t = " << t << ", " << "x_hat[0]: " << kf.state().transpose() << std::endl;
       double latest = 0.;
       for(int i = 0; i < measurements->size(); i++) {
-      //for (std::vector<double>::iterator i = measurements->begin(); i != measurements->end(); i++) {
+      //for (std::vector<double*>::iterator i = measurements->begin(); i != measurements->end(); i++) {
         t += dt;
-	std::cout<<"doing propagate , beforeUpdate and kf state "<<beforeUpdate.transpose() <<" "<< kf.state().transpose()<<std::endl;
+	//std::cout<<"doing propagate , beforeUpdate and kf state "<<beforeUpdate.transpose() <<" "<< kf.state().transpose()<<std::endl;
 	Eigen::MatrixXd AA = kf.propagate(beforeUpdate, kf.state());
-	std::cout<<"doing projection"<<std::endl;
+	//std::cout<<"doing projection"<<std::endl;
 	Eigen::MatrixXd CC = kf.projection(kf.state(), 0.01);
         y << (measurements->at(i))[0], (measurements->at(i))[1], (measurements->at(i))[2];
-        beforeUpdate = kf.state();
+	//std::cout<<"measurements "<<(measurements->at(i))[0]<<" "<< (measurements->at(i))[1]<<" "<< (measurements->at(i))[2]<<std::endl;
+	//std::cout<<"measurements "<<i[0]<<" "<<i[1]<<" "<<i[2]<<std::endl;
+	beforeUpdate = kf.state();
 	std::cout<<"updating "<<std::endl;
 	kf.update(y, t, AA, CC);
         //std::cout << "t = " << t << ", " << "y[" << i << "] = " << y.transpose()
         //    << ", x_hat[" << i << "] = " << kf.state().transpose() << std::endl;
-        std::cout<<"event "<<iEvt<<" "<<i<<" measurements "<<y.transpose()<<" predictions "<<kf.state().transpose()<<std::endl;
+        std::cout<<"event "<<iEvt<<"; point "<<i<<"; measurements "<<y.transpose()<<"; predictions "<<kf.state().transpose()<<std::endl;
         //std::cout<<"test "<<kf.state().transpose()(0)<<"  |  "<<kf.state().transpose()(1)<<std::endl;
         signVote += kf.state().transpose()(2);
         meanFirstOrder  +=  kf.state().transpose()(1);
         meanSecondOrder +=  kf.state().transpose()(2);
+	if (iEvt<20){
+	  h2[iEvt] -> Fill((measurements->at(i))[0],(measurements->at(i))[1], 1);
+	  Eigen::VectorXd tempVec = CC * kf.state();
+	  h22[iEvt]-> Fill(tempVec[0], tempVec[1], 1);
+	}	  
         //outR[iEvt].push_back(kf.state().transpose()(2));
 	latest = kf.state().transpose()(2);
       }
@@ -514,7 +527,7 @@ int main(int argc, char* argv[]){
       meanFirstOrder /= measurements->size();
       meanSecondOrder /= measurements->size();
       int m_muonSign2 = 0;
-      if (latest < 0){
+      if (signVote < 0){
         m_muonSign2 = -1;
         mCount++;
       }  
@@ -522,5 +535,11 @@ int main(int argc, char* argv[]){
         m_muonSign2 = 1;
     }
   }
+  TFile* outFile = TFile::Open("outfile.root","RECREATE");
+  for(Int_t ii=0; ii< 20; ii++){
+    h2[ii]->Write(Form("measure_track_%d",ii));
+    h22[ii]->Write(Form("state_track_%d",ii));
+  }
+  outFile->Close();
   std::cout<<"total number of events "<<iEvt<<" ; number of muons with negative sign : "<<mCount<<std::endl;
 }
