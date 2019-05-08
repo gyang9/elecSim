@@ -27,7 +27,7 @@ public:
     );
 
   // read in the electronics simulated files
-  std::vector<std::vector<std::vector<double>>> readInMeasure(TString t, int pdg, TString det);
+  std::map<double,std::vector<std::vector<double>>> readInMeasure(int t, int pdg, TString det);
 
   // Matrices for computation
   Eigen::MatrixXd kA, kC, kQ, kR, kP, kK, kP0;

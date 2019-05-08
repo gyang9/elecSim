@@ -12,31 +12,34 @@
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 
-std::vector<std::vector<std::vector<double>>> KalmanFilterAlgorithm::readInMeasure(TString inFile, int pdg, TString det){
+std::map<double, std::vector<std::vector<double>>> KalmanFilterAlgorithm::readInMeasure(int inFile, int pdg, TString det){
 
-  TFile infile("/home/guang/work/elecSim/"+inFile);
+  TFile infile(Form("/dune/app/users/gyang/elecSim/full3DST.neutrino.eleSim.file%d.patch0.root",inFile));
   TTree* t = (TTree*)infile.Get("EDepSimTree");
 
   std::cout<<"inside the readInMeasure() "<<std::endl;
-  double hitLocation[2000][3]={};
-  double hitPE_mean[2000][3]={};
-  double hitPE_measure[2000][3]={};
-  double hitT[2000][3]={};
-  double hitPrim[2000]={};
-  int hitPDG[2000]={};
-  double hitE[2000]={};
-  double true4Mom[30][4]={};
-  int if3DST[2000]={};
-  int ifTPC[2000]={};
+  double hitLocation[3000][3]={};
+  double hitPE_mean[3000][3]={};
+  double hitPE_measure[3000][3]={};
+  double hitT[3000][3]={};
+  double hitPrim[3000]={};
+  int hitPDG[3000]={};
+  double hitE[3000]={};
+  double true4Mom[100][4]={};
+  int if3DST[3000]={};
+  int ifTPC[3000]={};
   int use3DST=0;
   int useTPC=0;
-  std::vector<std::vector<std::vector<double>>> output;
+  double trueE = 0;
+  std::map<double, std::vector<std::vector<double>>> output;
 
   t->SetBranchAddress("hitLocation",&hitLocation);
   t->SetBranchAddress("hitE",&hitE);
   t->SetBranchAddress("hitPDG",&hitPDG);
   t->SetBranchAddress("if3DST",&if3DST);
   t->SetBranchAddress("ifTPC",&ifTPC);
+  t->SetBranchAddress("true4Mom",&true4Mom);
+  t->SetBranchAddress("hitPrim",&hitPrim);
 
   if(det.Contains("TPC")){
     useTPC = 1;
@@ -51,36 +54,52 @@ std::vector<std::vector<std::vector<double>>> KalmanFilterAlgorithm::readInMeasu
 
     t->GetEntry(i);
 
+    for(Int_t j=0;j<3000;j++){
+      if(hitPDG[j] == pdg && hitPrim[j] > 0 ){
+        int temploca = hitPrim[j];
+	if(true4Mom[temploca][3]){
+	  trueE = true4Mom[temploca][3];
+	  break;
+	}	
+      }
+    }
+    std::cout<<"true energy is "<<trueE<<std::endl;
+
     std::vector<std::vector<double>> temp;
     std::vector<double> tem;
-    for(Int_t j=0;j<2000;j++){
-      if(if3DST[j] == use3DST && use3DST == 1){
-        if(hitPDG[j] == pdg){
-	  // the coordinate in KF is different, so use this:	
-	  tem.push_back( hitLocation[j][1]);
-	  tem.push_back( hitLocation[j][2]);
-	  tem.push_back( hitLocation[j][0]);
-	  //std::cout<< tem[0]<<std::endl;
-          temp.push_back(tem);    
-	}
+    if (trueE > 0){
+      for(Int_t j=0;j<3000;j++){
+        if(if3DST[j] == use3DST && use3DST == 1){
+          if(hitPDG[j] == pdg){
+	    // the coordinate in KF is different, so use this:	
+	    tem.push_back( hitLocation[j][1]);
+	    tem.push_back( hitLocation[j][2]);
+	    tem.push_back( hitLocation[j][0]);
+	    //std::cout<< tem[0]<<std::endl;
+            temp.push_back(tem);    
+	  }
+        }
+        else if(ifTPC[j] == useTPC && useTPC == 1){
+          if(hitPDG[j] == pdg){
+            // the coordinate in KF is different, so use this:    
+            tem.push_back( hitLocation[j][1]);
+            tem.push_back( hitLocation[j][2]);
+            tem.push_back( hitLocation[j][0]);
+            temp.push_back(tem);
+	  }
+        }
+        tem.erase (tem.begin(), tem.end());  
       }
-      else if(ifTPC[j] == useTPC && useTPC == 1){
-        if(hitPDG[j] == pdg){
-          // the coordinate in KF is different, so use this:    
-          tem.push_back( hitLocation[j][1]);
-          tem.push_back( hitLocation[j][2]);
-          tem.push_back( hitLocation[j][0]);
-          temp.push_back(tem);
-	}
-      }
-      tem.erase (tem.begin(), tem.end());  
+      //for(Int_t itest = 0; itest< temp.size(); itest++)
+      //  std::cout<<temp.size()<<" "<<(temp.at(itest))[0]<<" "<<std::endl; //<<(temp.at(itest))[1]<<" "<<(temp.at(itest))[2]<<std::endl;
+      std::cout<<"------------------------------------"<<std::endl;
+      output.emplace(trueE, temp);
+      //output.push_back(temp);
     }
-    //for(Int_t itest = 0; itest< temp.size(); itest++)
-    //  std::cout<<temp.size()<<" "<<(temp.at(itest))[0]<<" "<<std::endl; //<<(temp.at(itest))[1]<<" "<<(temp.at(itest))[2]<<std::endl;
-    //std::cout<<"------------------------------------"<<std::endl;
-    output.push_back(temp);
+    trueE = -1;
     temp.erase (temp.begin(),temp.end());
   }
+  std::cout<<"dddd"<<std::endl;
   return output;
 }
 
