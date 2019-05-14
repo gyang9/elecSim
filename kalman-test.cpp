@@ -42,6 +42,7 @@ std::map<double, std::vector<std::vector<double>>> KalmanFilterAlgorithm::readIn
   t->SetBranchAddress("true4Mom",&true4Mom);
   t->SetBranchAddress("hitPrim",&hitPrim);
   t->SetBranchAddress("vtxPoint",&vtxPoint);
+  t->SetBranchAddress("hitT",&hitT);
 
   if(det.Contains("TPC")){
     useTPC = 1;
@@ -70,7 +71,7 @@ std::map<double, std::vector<std::vector<double>>> KalmanFilterAlgorithm::readIn
 
     std::vector<std::vector<double>> temp;
     std::vector<double> tem;
-    if (trueE>300 && TMath::Abs(vtxPoint[0])<0.8 && TMath::Abs(vtxPoint[1])<0.8 && vtxPoint[2]>4.2 && vtxPoint[2]<5.8){
+    if (trueE>1000 && TMath::Abs(vtxPoint[0])<0.8 && TMath::Abs(vtxPoint[1])<0.8 && vtxPoint[2]>4.2 && vtxPoint[2]<5.8){
       for(Int_t j=0;j<3000;j++){
         if(if3DST[j] == use3DST && use3DST == 1){
           if(hitPDG[j] == pdg && j%3 == 1){
@@ -78,6 +79,9 @@ std::map<double, std::vector<std::vector<double>>> KalmanFilterAlgorithm::readIn
 	    tem.push_back( hitLocation[j][1]);
 	    tem.push_back( hitLocation[j][2]);
 	    tem.push_back( hitLocation[j][0]);
+	    tem.push_back( hitT[j][0]);
+	    tem.push_back( hitT[j][1]);
+	    tem.push_back( hitT[j][2]);
 	    //std::cout<< tem[0]<<std::endl;
             temp.push_back(tem);    
 	  }
@@ -88,6 +92,9 @@ std::map<double, std::vector<std::vector<double>>> KalmanFilterAlgorithm::readIn
             tem.push_back( hitLocation[j][1]);
             tem.push_back( hitLocation[j][2]);
             tem.push_back( hitLocation[j][0]);
+	    tem.push_back( hitT[j][0]);
+	    tem.push_back( hitT[j][1]);
+	    tem.push_back( hitT[j][2]);
             temp.push_back(tem);
 	  }
         }
@@ -144,6 +151,7 @@ Eigen::MatrixXd KalmanFilterAlgorithm::propagate(double drho, double theta0, dou
 		double drho_prime, double theta0_prime, double kappa_prime, double dz_prime, double tanlambda_prime){
   Eigen::MatrixXd AA(5,5);
   double alpha = 1./(speedOfLight * Bfield);
+
   double aa = -TMath::Power((drho_prime + alpha/kappa),-1) * TMath::Sin(theta0_prime - theta0);
   double ab = (drho + alpha/kappa)*TMath::Power((drho_prime + alpha/kappa),-1) * TMath::Cos(theta0_prime - theta0);
   double ac = alpha/(kappa*kappa) * TMath::Power((drho_prime + alpha/kappa),-1) * TMath::Sin(theta0_prime - theta0);

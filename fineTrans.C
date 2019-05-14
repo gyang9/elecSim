@@ -466,14 +466,13 @@ outFile->Close();
 }
 
 bool comparison(std::vector<double> a, std::vector<double> b){
-  return (a[2]<b[2]);
+  return (a[0]<b[0]);
 }
 std::map<double, std::vector<std::vector<double>>> New_map(std::map<double, std::vector<std::vector<double>>> old_map){ 
   std::map<double, std::vector<std::vector<double>>> output;
   for(std::map<double,std::vector<std::vector<double>>>::iterator Measurements = old_map.begin(); Measurements != old_map.end(); ++ Measurements){
     double TrueE=Measurements->first;
     std::vector<std::vector<double>> measurements = Measurements->second;
-    std::vector<std::vector<double>> New_measurements;
     if(measurements.size()>3){
       std::sort(measurements.begin(), measurements.end(),comparison);
       output.emplace(TrueE, measurements);
@@ -651,12 +650,12 @@ int main(int argc, char* argv[]){
       meanSecondOrder /= measurements.size();
       int m_muonSign2 = 0;
       signAll -> Fill(trueE);
-      if (signVote < -10){
+      if (signVote < 0){
 	signSel -> Fill(trueE);
         m_muonSign2 = -1;
         mCount++;
       }  
-      else if (signVote > 10) {
+      else if (signVote > 0) {
 	mCount2 ++;
         m_muonSign2 = 1;
       }
