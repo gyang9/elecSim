@@ -473,10 +473,6 @@ std::map<double, std::vector<std::vector<double>>> New_map(std::map<double, std:
   for(std::map<double,std::vector<std::vector<double>>>::iterator Measurements = old_map.begin(); Measurements != old_map.end(); ++ Measurements){
     double TrueE=Measurements->first;
     std::vector<std::vector<double>> measurements = Measurements->second;
-    std::vector<double> rank_Z ;
-    std::vector<double> rank_Y ;
-    std::vector<double> rank_X ;
-    std::vector<double> coordinate ;
     std::vector<std::vector<double>> New_measurements;
     if(measurements.size()>3){
       std::sort(measurements.begin(), measurements.end(),comparison);
