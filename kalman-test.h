@@ -113,6 +113,12 @@ public:
 
   double depositEnergy ;
   double trueEnergy;
+
+  double speedOfLight;
+  double Bfield;
+
+  void setSpeedOfLight(double x) {speedOfLight = x; }
+  void setBfield(double x) {Bfield = x; }
   //std::vector<double*> measurements;
 
   std::string         m_inputCaloHitListName;             ///< The input calo hit list name

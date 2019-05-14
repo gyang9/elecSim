@@ -1,6 +1,8 @@
 #include <TFile.h>
 #include <TH2F.h>
+#include <TGraph2D.h>
 #include <TH1F.h>
+#include <TH3F.h>
 #include <TGraph.h>
 #include <TMultiGraph.h>
 #include <TTree.h>
@@ -78,7 +80,7 @@ double vtxPoint[4] = {};
 Int_t NHits = 0;
 Int_t hitPE_m[3000][3]={};
 
-TFile* outFile = TFile::Open(Form("/dune/app/users/gyang/elecSim/full3DST.neutrino.eleSim.file%d.patch%d.root", inputF, ident),"RECREATE");
+TFile* outFile = TFile::Open(Form("/home/guang/work/elecSim/full3DST.neutrino.eleSim.file%d.patch%d.root", inputF, ident),"RECREATE");
 TTree* c = new TTree("EDepSimTree","EDepSimTree");
 c->Branch("event",&eventN,"event/I");
 c->Branch("hitLocation",&hitLocation,"hitLocation[3000][3]/D");
@@ -103,7 +105,7 @@ c->Branch("nuPDG",& nupdg,"nuPDG/I");
 //c->Branch("hitLowQ",&loQ,"hitLowQ[3]/D");
 //c->Branch("hitLowADC",&loadc,"hitLowADC[3]/D");
 
-TFile g(Form("/pnfs/dune/persistent/users/gyang/3DST/edep/fullGeo/standardGeo10/PROD106/full3DST.neutrino.%d.edepsim.root",inputF));
+TFile g(Form("/home/guang/work/elecSim/PROD115/full3DST.neutrino.%d.edepsim.root",inputF));
 TTree* events = (TTree*) g.Get("EDepSimEvents");
 
 TG4Event* event=NULL;
@@ -127,7 +129,7 @@ TRandom3* random1 = new TRandom3();
 TRandom3* random2 = new TRandom3();
 random2->SetSeed(6666);
 
-TFile f1b(Form("/pnfs/dune/persistent/users/gyang/3DST/genie/fullGeo/standardGeo10/PROD101/full3DST.neutrino.%d.rootracker.root",inputF));
+TFile f1b(Form("/home/guang/work/elecSim/PROD104/full3DST.neutrino.%d.rootracker.root",inputF));
 TTree* h1b = (TTree*) f1b.Get("gRooTracker");
 
 h1b->SetBranchAddress("StdHepPdg", &StdHepPdgb);
@@ -475,11 +477,27 @@ int main(int argc, char* argv[]){
   //
   TH2D* h2[20];
   TH2D* h22[20];
+  TH2D* h222[20];
+  TH2D* h2222[20];
+  TGraph2D* dt2[20];
+  TGraph2D* dt22[20];
+  TH1D* histState[5];
   for(int i=0;i<20;i++){ 
-    h2[i] = new TH2D("","",2000,-1000,1000,2400,-1200,1200);
-    h22[i] = new TH2D("","",2000,-1000,1000,2400,-1200,1200);
+    // y vs. z
+    h2[i] = new TH2D("","",2400,-1200,1200,2000,-1000,1000);
+    h22[i] = new TH2D("","",2400,-1200,1200,2000,-1000,1000);
+    // y vs. x
+    h222[i] = new TH2D("","",2400,-1200,1200,2400,-1200,1200);
+    h2222[i] = new TH2D("","",2400,-1200,1200,2400,-1200,1200);
+    dt2[i] = new TGraph2D();
+    dt22[i] = new TGraph2D();
+    if(i<5) {
+      if(i == 1)
+        histState[i] =  new TH1D("","",100,-20,20);
+      else	      
+        histState[i] =  new TH1D("","",100,-2000,2000);
+    }
   }
-
   TH1D* signAll = new TH1D("","",50,0,5000);
   TH1D* signSel = new TH1D("","",50,0,5000);
   std::cout<<"ready to run Kalman filter .."<<std::endl;
@@ -513,11 +531,11 @@ int main(int argc, char* argv[]){
   R << 1, 0, 0,
        0, 1, 0,
        0, 0, 1;
-  P << 100, 1, 1, 1, 1,
-       1, 100, 1, 1, 1,
-       1, 1, 100, 1, 1,
-       1, 1, 1, 100, 1,
-       1, 1, 1, 1, 100;
+  P << 10, 1, 1, 1, 1,
+       1, 10, 1, 1, 1,
+       1, 1, 10, 1, 1,
+       1, 1, 1, 10, 1,
+       1, 1, 1, 1, 10;
 
   std::cout << "A: \n" << A << std::endl;
   std::cout << "C: \n" << C << std::endl;
@@ -527,14 +545,21 @@ int main(int argc, char* argv[]){
 
   // Construct the filter
   KalmanFilterAlgorithm kf(0, A, C, Q, R, P);
-
-  int usePDG = 13;
-  TString useDet = "3DSTTPC";
+ 
+  ////////////////////////////////////////////////////////////////////////////////////////////
+  kf.setSpeedOfLight(300);             ////        //////    ///       //  /////   //    ////
+  kf.setBfield(1.5);                   ////        ///  // //  //      //   //     //    //// 
+  int usePDG = 13;                     ////        ///  // //  //      //   //           ////
+  TString useDet = "3DST";             ////        //////   ////       //   //     //    ////
+  ////////////////////////////////////////////////////////////////////////////////////////////
+  
   // set up measurements
   std::cout<<"reading in the measurement "<<std::endl;
   std::map<double, std::vector<std::vector<double>>> _measurements = kf.readInMeasure(atoi(argv[1]), usePDG, useDet);
+
   std::vector<std::vector<double>> outR;
   int mCount = 0;
+  int mCount2 = 0;
   int iEvt = 0;
   //std::vector<double> measurements;
   std::cout<<"looping through the events "<<std::endl;
@@ -549,7 +574,7 @@ int main(int argc, char* argv[]){
     
     double trueE = Measurements->first;
     std::vector<std::vector<double>> measurements = Measurements->second;
-    std::cout<<"size of the event hit list: "<<measurements.size()<<std::endl; 
+    //std::cout<<"size of the event hit list: "<<measurements.size()<<std::endl; 
     if(measurements.size()>3){
       // Best guess of initial states
       Eigen::VectorXd beforeUpdate(n);
@@ -564,7 +589,7 @@ int main(int argc, char* argv[]){
       double meanFirstOrder = 0.;
       double meanSecondOrder= 0.;
       Eigen::VectorXd y(m);
-      std::cout << "t = " << t << ", " << "x_hat[0]: " << kf.state().transpose() << std::endl;
+      //std::cout << "t = " << t << ", " << "x_hat[0]: " << kf.state().transpose() << std::endl;
       double latest = 0.;
       for(int i = 0; i < measurements.size(); i++) {
       //for (std::vector<double*>::iterator i = measurements->begin(); i != measurements->end(); i++) {
@@ -577,22 +602,28 @@ int main(int argc, char* argv[]){
 	//std::cout<<"measurements "<<(measurements->at(i))[0]<<" "<< (measurements->at(i))[1]<<" "<< (measurements->at(i))[2]<<std::endl;
 	//std::cout<<"measurements "<<i[0]<<" "<<i[1]<<" "<<i[2]<<std::endl;
 	beforeUpdate = kf.state();
-	std::cout<<"updating "<<std::endl;
+	//std::cout<<"updating "<<std::endl;
 	kf.update(y, t, AA, CC);
         //std::cout << "t = " << t << ", " << "y[" << i << "] = " << y.transpose()
         //    << ", x_hat[" << i << "] = " << kf.state().transpose() << std::endl;
         std::cout<<"event "<<iEvt<<"; point "<<i<<"; measurements "<<y.transpose()<<"; predictions "<<kf.state().transpose()<<std::endl;
         //std::cout<<"test "<<kf.state().transpose()(0)<<"  |  "<<kf.state().transpose()(1)<<std::endl;
-        signVote += kf.state().transpose()(2);
+        signVote += kf.state().transpose()(1) ;
         meanFirstOrder  +=  kf.state().transpose()(1);
         meanSecondOrder +=  kf.state().transpose()(2);
 	if (iEvt<20){
 	  h2[iEvt] -> Fill((measurements.at(i))[0],(measurements.at(i))[1], 1);
 	  Eigen::VectorXd tempVec = CC * kf.state();
 	  h22[iEvt]-> Fill(tempVec[0], tempVec[1], 1);
+	  h222[iEvt] -> Fill((measurements.at(i))[0],(measurements.at(i))[2], 1);
+	  h2222[iEvt]-> Fill(tempVec[0], tempVec[2], 1);
+	  dt2[iEvt] ->SetPoint(i, (measurements.at(i))[0],(measurements.at(i))[1], (measurements.at(i))[2]);
+	  dt22[iEvt] ->SetPoint(i, tempVec[0], tempVec[1], tempVec[2]);
 	}	  
         //outR[iEvt].push_back(kf.state().transpose()(2));
-	latest = kf.state().transpose()(2);
+	if(i==10) latest = kf.state().transpose()(2) ;
+	for ( Int_t istate = 0; istate < 5 ; istate++ )
+	  histState[istate]->Fill(kf.state().transpose()(istate));	
       }
       iEvt ++;
 
@@ -600,24 +631,34 @@ int main(int argc, char* argv[]){
       meanSecondOrder /= measurements.size();
       int m_muonSign2 = 0;
       signAll -> Fill(trueE);
-      if (latest < 0){
+      if (signVote < -10){
 	signSel -> Fill(trueE);
         m_muonSign2 = -1;
         mCount++;
       }  
-      else{
+      else if (signVote > 10) {
+	mCount2 ++;
         m_muonSign2 = 1;
       }
     }
   }
-  TFile* outFile = TFile::Open("outfile_0.4.root","RECREATE");
+
+  TFile* outFile = TFile::Open("outfile_1.5.root","RECREATE");
   for(Int_t ii=0; ii< 20; ii++){
-    h2[ii]->Write(Form("measure_track_%d",ii));
-    h22[ii]->Write(Form("state_track_%d",ii));
+    dt2[ii]->SetFillColor(2);
+    dt22[ii]->SetFillColor(4);	  
+    h2[ii]->Write(Form("measure_track_%d_yz",ii));
+    h22[ii]->Write(Form("state_track_%d_yz",ii));
+    h222[ii]->Write(Form("measure_track_%d_yx",ii));
+    h2222[ii]->Write(Form("state_track_%d_yx",ii));
+    dt2[ii]->Write(Form("measure_track_%d_3D",ii));
+    dt22[ii]->Write(Form("state_track_%d_3D",ii));
   }
+  for (Int_t istate=0;istate<5;istate++)
+    histState[istate]->Write(Form("hist_state_%d",istate));
   signAll->Write("signAll");
   signSel->Write("signSel");
   outFile->Close();
-  std::cout<<"total number of events "<<iEvt<<" ; number of muons with negative sign : "<<mCount<<std::endl;
+  std::cout<<"total number of events "<<iEvt<<" ; number of muons with negative sign : "<<mCount<<" ; with positive sign : "<<mCount2<<std::endl;
 }
 

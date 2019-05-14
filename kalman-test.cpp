@@ -14,7 +14,7 @@
 
 std::map<double, std::vector<std::vector<double>>> KalmanFilterAlgorithm::readInMeasure(int inFile, int pdg, TString det){
 
-  TFile infile(Form("/dune/app/users/gyang/elecSim/full3DST.neutrino.eleSim.file%d.patch0.root",inFile));
+  TFile infile(Form("/home/guang/work/elecSim/full3DST.neutrino.eleSim.file%d.patch0.root",inFile));
   TTree* t = (TTree*)infile.Get("EDepSimTree");
 
   std::cout<<"inside the readInMeasure() "<<std::endl;
@@ -28,6 +28,7 @@ std::map<double, std::vector<std::vector<double>>> KalmanFilterAlgorithm::readIn
   double true4Mom[100][4]={};
   int if3DST[3000]={};
   int ifTPC[3000]={};
+  double vtxPoint[4]={};
   int use3DST=0;
   int useTPC=0;
   double trueE = 0;
@@ -40,6 +41,7 @@ std::map<double, std::vector<std::vector<double>>> KalmanFilterAlgorithm::readIn
   t->SetBranchAddress("ifTPC",&ifTPC);
   t->SetBranchAddress("true4Mom",&true4Mom);
   t->SetBranchAddress("hitPrim",&hitPrim);
+  t->SetBranchAddress("vtxPoint",&vtxPoint);
 
   if(det.Contains("TPC")){
     useTPC = 1;
@@ -48,6 +50,7 @@ std::map<double, std::vector<std::vector<double>>> KalmanFilterAlgorithm::readIn
     use3DST = 1;
   }
 
+  std::cout<<"require pdg "<<pdg<<std::endl;
   //std::vector<double*> temp;
   //double tem[3];
   for(Int_t i=0;i<t->GetEntries();i++){
@@ -63,14 +66,14 @@ std::map<double, std::vector<std::vector<double>>> KalmanFilterAlgorithm::readIn
 	}	
       }
     }
-    std::cout<<"true energy is "<<trueE<<std::endl;
+    std::cout<<"true energy is "<<trueE<<" and vtx "<<vtxPoint[0]<<" "<<vtxPoint[1]<<" "<<vtxPoint[2]<<std::endl;
 
     std::vector<std::vector<double>> temp;
     std::vector<double> tem;
-    if (trueE > 0){
+    if (trueE>300 && TMath::Abs(vtxPoint[0])<0.8 && TMath::Abs(vtxPoint[1])<0.8 && vtxPoint[2]>4.2 && vtxPoint[2]<5.8){
       for(Int_t j=0;j<3000;j++){
         if(if3DST[j] == use3DST && use3DST == 1){
-          if(hitPDG[j] == pdg){
+          if(hitPDG[j] == pdg && j%3 == 1){
 	    // the coordinate in KF is different, so use this:	
 	    tem.push_back( hitLocation[j][1]);
 	    tem.push_back( hitLocation[j][2]);
@@ -80,7 +83,7 @@ std::map<double, std::vector<std::vector<double>>> KalmanFilterAlgorithm::readIn
 	  }
         }
         else if(ifTPC[j] == useTPC && useTPC == 1){
-          if(hitPDG[j] == pdg){
+          if(hitPDG[j] == pdg && j%3 == 1){
             // the coordinate in KF is different, so use this:    
             tem.push_back( hitLocation[j][1]);
             tem.push_back( hitLocation[j][2]);
@@ -93,13 +96,13 @@ std::map<double, std::vector<std::vector<double>>> KalmanFilterAlgorithm::readIn
       //for(Int_t itest = 0; itest< temp.size(); itest++)
       //  std::cout<<temp.size()<<" "<<(temp.at(itest))[0]<<" "<<std::endl; //<<(temp.at(itest))[1]<<" "<<(temp.at(itest))[2]<<std::endl;
       std::cout<<"------------------------------------"<<std::endl;
-      output.emplace(trueE, temp);
+      //output.emplace(trueE, temp);
+      output.insert(make_pair(trueE, temp));
       //output.push_back(temp);
     }
     trueE = -1;
     temp.erase (temp.begin(),temp.end());
   }
-  std::cout<<"dddd"<<std::endl;
   return output;
 }
 
@@ -121,7 +124,7 @@ KalmanFilterAlgorithm::KalmanFilterAlgorithm(
 //http://www-jlc.kek.jp/subg/offl/kaltest/doc/ReferenceManual.pdf
 Eigen::MatrixXd KalmanFilterAlgorithm::projection(double drho, double theta0, double kappa, double dz, double tanlambda, double theta){
   Eigen::MatrixXd AA(5,3);
-  double alpha = 1./(300. * 0.4);
+  double alpha = 1./(speedOfLight * Bfield);
   AA<< TMath::Cos(theta0), TMath::Sin(theta0), 0,
        -(drho + alpha/kappa)*TMath::Sin(theta0) + (alpha/kappa)*TMath::Sin(theta0+theta),
        (drho + alpha/kappa)*TMath::Cos(theta0) - (alpha/kappa)*TMath::Cos(theta0+theta), 0,
@@ -140,21 +143,21 @@ Eigen::MatrixXd KalmanFilterAlgorithm::projection(Eigen::VectorXd v, double thet
 Eigen::MatrixXd KalmanFilterAlgorithm::propagate(double drho, double theta0, double kappa, double dz, double tanlambda, 
 		double drho_prime, double theta0_prime, double kappa_prime, double dz_prime, double tanlambda_prime){
   Eigen::MatrixXd AA(5,5);
-  double alpha = 1./(300. * 0.4);
+  double alpha = 1./(speedOfLight * Bfield);
   double aa = -TMath::Power((drho_prime + alpha/kappa),-1) * TMath::Sin(theta0_prime - theta0);
   double ab = (drho + alpha/kappa)*TMath::Power((drho_prime + alpha/kappa),-1) * TMath::Cos(theta0_prime - theta0);
   double ac = alpha/(kappa*kappa) * TMath::Power((drho_prime + alpha/kappa),-1) * TMath::Sin(theta0_prime - theta0);
   double ad = 0;
   double ae = 0;
 
-  std::cout<<"finished one propagate "<<std::endl;
+  //std::cout<<"finished one propagate "<<std::endl;
   double ba = TMath::Cos(theta0_prime - theta0);
   double bb = (drho_prime + alpha/kappa) * TMath::Sin(theta0_prime - theta0);
   double bc = alpha/(kappa*kappa) * (1- TMath::Cos(theta0_prime - theta0));
   double bd = 0;
   double be = 0;
 
-  std::cout<<"finished two propagate "<<std::endl;
+  //std::cout<<"finished two propagate "<<std::endl;
   double ca = 0;
   double cb = 0;
   double cc = 1;
@@ -173,13 +176,13 @@ Eigen::MatrixXd KalmanFilterAlgorithm::propagate(double drho, double theta0, dou
   double dd = 1; 
   double de = -(alpha/kappa) * (theta0_prime - theta0);
 
-  std::cout<<"finished all propagate "<<std::endl;
+  //std::cout<<"finished all propagate "<<std::endl;
   AA << ba, bb, bc, bd, be,
         aa, ab, ac, ad, ae,
 	ca, cb, cc, cd, ce,
         da, db, dc, dd, de,
 	ea, eb, ec, ed, ee;
-  std::cout<<AA<<std::endl;
+  //std::cout<<AA<<std::endl;
   return AA;
 }
 
@@ -196,7 +199,7 @@ Eigen::MatrixXd KalmanFilterAlgorithm::propagate(Eigen::VectorXd v, Eigen::Vecto
 
 Eigen::MatrixXd KalmanFilterAlgorithm::currentPropagator(double drho, double theta0, double kappa, double dz, double tanlambda, Eigen::VectorXd& x0, double theta){
   
-  double alpha = 1./ (300. * 0.4);
+  double alpha = 1./ (speedOfLight * Bfield);
 
   double Xc = x0(0) + (drho + alpha/kappa)* TMath::Cos(theta0);
   double Yc = x0(1) + (drho + alpha/kappa)* TMath::Sin(theta0);	  
