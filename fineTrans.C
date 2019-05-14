@@ -465,6 +465,27 @@ outFile->Write();
 outFile->Close();
 }
 
+bool comparison(std::vector<double> a, std::vector<double> b){
+  return (a[2]<b[2]);
+}
+std::map<double, std::vector<std::vector<double>>> New_map(std::map<double, std::vector<std::vector<double>>> old_map){ 
+  std::map<double, std::vector<std::vector<double>>> output;
+  for(std::map<double,std::vector<std::vector<double>>>::iterator Measurements = old_map.begin(); Measurements != old_map.end(); ++ Measurements){
+    double TrueE=Measurements->first;
+    std::vector<std::vector<double>> measurements = Measurements->second;
+    std::vector<double> rank_Z ;
+    std::vector<double> rank_Y ;
+    std::vector<double> rank_X ;
+    std::vector<double> coordinate ;
+    std::vector<std::vector<double>> New_measurements;
+    if(measurements.size()>3){
+      std::sort(measurements.begin(), measurements.end(),comparison);
+      output.emplace(TrueE, measurements);
+    }
+  }
+  return output;
+}
+
 
 int main(int argc, char* argv[]){
 
@@ -520,22 +541,22 @@ int main(int argc, char* argv[]){
        0, 0, 0, 0, 1;
   C << 1, 0, 0, 0, 0,
        0, 1, 0, 0, 0,
-       0, 0, 1, 0, 0;
+       0, 0, -1, 0, 0;
 
   // Reasonable covariance matrices
-  Q << 1, .05, .05, .0, .0,
-       .05, 1, .05, .0, .0,
-       .05, .05, 1, .0, .05,
-       .0, .0, .0, 1, .05,
+  Q << 1, .0, .0, .0, .0,
+       .0, 1, .0, .0, .0,
+       .0, .0, 0.01, .0, .0,
+       .0, .0, .0, 1, .0,
        .0, .0, .0, .0, 1,
-  R << 1, 0, 0,
-       0, 1, 0,
-       0, 0, 1;
-  P << 10, 1, 1, 1, 1,
-       1, 10, 1, 1, 1,
-       1, 1, 10, 1, 1,
-       1, 1, 1, 10, 1,
-       1, 1, 1, 1, 10;
+  R << 0.1, 0, 0,
+       0, 0.1, 0,
+       0, 0, 0.1;
+  P << 10, 3, 3, 3, 3,
+       3, 10, 3, 3, 3,
+       3, 3, 10, 3, 3,
+       3, 3, 3, 10, 3,
+       3, 3, 3, 3, 10;
 
   std::cout << "A: \n" << A << std::endl;
   std::cout << "C: \n" << C << std::endl;
@@ -555,7 +576,8 @@ int main(int argc, char* argv[]){
   
   // set up measurements
   std::cout<<"reading in the measurement "<<std::endl;
-  std::map<double, std::vector<std::vector<double>>> _measurements = kf.readInMeasure(atoi(argv[1]), usePDG, useDet);
+  std::map<double, std::vector<std::vector<double>>> _measure = kf.readInMeasure(atoi(argv[1]), usePDG, useDet);
+  std::map<double, std::vector<std::vector<double>>> _measurements=New_map(_measure );
 
   std::vector<std::vector<double>> outR;
   int mCount = 0;
@@ -575,12 +597,12 @@ int main(int argc, char* argv[]){
     double trueE = Measurements->first;
     std::vector<std::vector<double>> measurements = Measurements->second;
     //std::cout<<"size of the event hit list: "<<measurements.size()<<std::endl; 
-    if(measurements.size()>3){
+    if(measurements.size()>4){
       // Best guess of initial states
       Eigen::VectorXd beforeUpdate(n);
       Eigen::VectorXd x0(n);
-      beforeUpdate<< 0, 0, 1, 0, 0;
-      x0 << 0, 0, 1, 0, 0; //-9.81;
+      beforeUpdate<< 1, 1, 1, 1, 1;
+      x0 << 1, 1, 1, 1, 1; //-9.81;
       kf.init(0, x0);
 
       // Feed measurements into filter, output estimated states
@@ -607,6 +629,7 @@ int main(int argc, char* argv[]){
         //std::cout << "t = " << t << ", " << "y[" << i << "] = " << y.transpose()
         //    << ", x_hat[" << i << "] = " << kf.state().transpose() << std::endl;
         std::cout<<"event "<<iEvt<<"; point "<<i<<"; measurements "<<y.transpose()<<"; predictions "<<kf.state().transpose()<<std::endl;
+	std::cout<<"profected point : "<<(CC * kf.state())[0]<<" "<<(CC * kf.state())[1]  <<" "<<(CC * kf.state())[2] <<std::endl;
         //std::cout<<"test "<<kf.state().transpose()(0)<<"  |  "<<kf.state().transpose()(1)<<std::endl;
         signVote += kf.state().transpose()(1) ;
         meanFirstOrder  +=  kf.state().transpose()(1);
@@ -625,6 +648,7 @@ int main(int argc, char* argv[]){
 	for ( Int_t istate = 0; istate < 5 ; istate++ )
 	  histState[istate]->Fill(kf.state().transpose()(istate));	
       }
+      if(iEvt > 20) break;
       iEvt ++;
 
       meanFirstOrder /= measurements.size();
