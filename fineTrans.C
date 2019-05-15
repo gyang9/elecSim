@@ -466,7 +466,7 @@ outFile->Close();
 }
 
 bool comparison(std::vector<double> a, std::vector<double> b){
-  return (a[0]<b[0]);
+  return (a[3]+a[4]+a[5]<b[3]+b[4]+b[5]);
 }
 std::map<double, std::vector<std::vector<double>>> New_map(std::map<double, std::vector<std::vector<double>>> old_map){ 
   std::map<double, std::vector<std::vector<double>>> output;
@@ -539,14 +539,14 @@ int main(int argc, char* argv[]){
        0, 0, -1, 0, 0;
 
   // Reasonable covariance matrices
-  Q << 1, .0, .0, .0, .0,
-       .0, 1, .0, .0, .0,
-       .0, .0, 0.01, .0, .0,
+  Q << 10, .0, .0, .0, .0,
+       .0, 0.01, .0, .0, .0,
+       .0, .0, 0.001, .0, .0,
        .0, .0, .0, 1, .0,
-       .0, .0, .0, .0, 1,
-  R << 0.1, 0, 0,
-       0, 0.1, 0,
-       0, 0, 0.1;
+       .0, .0, .0, .0, 0.01,
+  R << 0.1, 0.001, 0.001,
+       0.001, 0.1, 0.001,
+       0.001, 0.001, 0.1;
   P << 10, 3, 3, 3, 3,
        3, 10, 3, 3, 3,
        3, 3, 10, 3, 3,
@@ -563,7 +563,7 @@ int main(int argc, char* argv[]){
   KalmanFilterAlgorithm kf(0, A, C, Q, R, P);
  
   ////////////////////////////////////////////////////////////////////////////////////////////
-  kf.setSpeedOfLight(300);             ////        //////    ///       //  /////   //    ////
+  kf.setSpeedOfLight(3e8);             ////        //////    ///       //  /////   //    ////
   kf.setBfield(1.5);                   ////        ///  // //  //      //   //     //    //// 
   int usePDG = 13;                     ////        ///  // //  //      //   //           ////
   TString useDet = "3DST";             ////        //////   ////       //   //     //    ////
@@ -596,8 +596,8 @@ int main(int argc, char* argv[]){
       // Best guess of initial states
       Eigen::VectorXd beforeUpdate(n);
       Eigen::VectorXd x0(n);
-      beforeUpdate<< 1, 1, 1, 1, 1;
-      x0 << 1, 1, 1, 1, 1; //-9.81;
+      beforeUpdate<< 2000, 3.14, 0.001, 100, 2;
+      x0 << 2000, 3.14, 0.001, 100, 2; //-9.81;
       kf.init(0, x0);
 
       // Feed measurements into filter, output estimated states
@@ -626,7 +626,7 @@ int main(int argc, char* argv[]){
         std::cout<<"event "<<iEvt<<"; point "<<i<<"; measurements "<<y.transpose()<<"; predictions "<<kf.state().transpose()<<std::endl;
 	std::cout<<"profected point : "<<(CC * kf.state())[0]<<" "<<(CC * kf.state())[1]  <<" "<<(CC * kf.state())[2] <<std::endl;
         //std::cout<<"test "<<kf.state().transpose()(0)<<"  |  "<<kf.state().transpose()(1)<<std::endl;
-        signVote += kf.state().transpose()(1) ;
+        signVote += kf.state().transpose()(2) ;
         meanFirstOrder  +=  kf.state().transpose()(1);
         meanSecondOrder +=  kf.state().transpose()(2);
 	if (iEvt<20){
@@ -639,23 +639,23 @@ int main(int argc, char* argv[]){
 	  dt22[iEvt] ->SetPoint(i, tempVec[0], tempVec[1], tempVec[2]);
 	}	  
         //outR[iEvt].push_back(kf.state().transpose()(2));
-	if(i==10) latest = kf.state().transpose()(2) ;
+	latest = kf.state().transpose()(2) ;
 	for ( Int_t istate = 0; istate < 5 ; istate++ )
 	  histState[istate]->Fill(kf.state().transpose()(istate));	
       }
-      if(iEvt > 20) break;
+      //if(iEvt > 20) break;
       iEvt ++;
 
       meanFirstOrder /= measurements.size();
       meanSecondOrder /= measurements.size();
       int m_muonSign2 = 0;
       signAll -> Fill(trueE);
-      if (signVote < 0){
+      if (latest < 0){
 	signSel -> Fill(trueE);
         m_muonSign2 = -1;
         mCount++;
       }  
-      else if (signVote > 0) {
+      else if (latest > 0) {
 	mCount2 ++;
         m_muonSign2 = 1;
       }
